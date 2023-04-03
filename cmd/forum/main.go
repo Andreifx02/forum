@@ -2,19 +2,33 @@ package main
 
 import (
 	// "context"
-	"fmt"
+	"log"
+	"sync"
 
+	"github.com/Andreifx02/forum/internal/config"
 	"github.com/Andreifx02/forum/internal/server"
 	postrgres "github.com/Andreifx02/forum/internal/storage/postgres"
+
 )
 
 func main() {
-	storage, err := postrgres.NewStorage("localhost", 5432, "postgres", "postgrespw", "postgres")
+	cfg := config.GetConfig()
+	
+	storage, err := postrgres.NewStorage(cfg)
 	if err != nil {
-		fmt.Printf("Can not connect db: %s", err.Error())
+		log.Printf("Can not connect db: %s\n", err.Error())
+	} else {
+		log.Println("Connected to postrges")
 	}
-
+	
 	server := server.New(storage)
-
-	server.StartListen("localhost", 8080)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		log.Println("Start listen server")
+		server.StartListen(cfg)
+		wg.Done()
+	}()
+	
+	wg.Wait()
 }

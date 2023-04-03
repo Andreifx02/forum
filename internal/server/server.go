@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/Andreifx02/forum/internal/config"
 	postrgres "github.com/Andreifx02/forum/internal/storage/postgres"
 	"github.com/gorilla/mux"
 )
@@ -18,7 +19,7 @@ func New(storage *postrgres.Storage) *Server {
 	}
 }
 
-func (s *Server) StartListen(host string, port int) {
+func (s *Server) StartListen(cfg *config.Config) {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/user/create", s.CreateUser).Methods("POST")
@@ -32,7 +33,7 @@ func (s *Server) StartListen(host string, port int) {
 
 	http.Handle("/", router)
 
-	url := fmt.Sprintf("%s:%d", host, port)
+	url := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	err := http.ListenAndServe(url, nil)
 	if err != nil {
 		fmt.Printf("%s", err.Error())

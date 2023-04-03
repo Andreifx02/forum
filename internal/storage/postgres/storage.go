@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 
+	"github.com/Andreifx02/forum/internal/config"
 	"github.com/Andreifx02/forum/internal/domain"
 )
 
@@ -15,9 +16,9 @@ type Storage struct {
 	pool *pgxpool.Pool
 }
 
-func NewStorage(host string, port int, user string, password string, dbname string) (*Storage, error) {
+func NewStorage(cfg *config.Config) (*Storage, error) {
 	psqlConn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname,
+		cfg.PostrgeSQL.Host, cfg.PostrgeSQL.Port, cfg.PostrgeSQL.User, cfg.PostrgeSQL.Password, cfg.PostrgeSQL.DbName,
 	)
 
 	pool, err := pgxpool.Connect(context.Background(), psqlConn)
