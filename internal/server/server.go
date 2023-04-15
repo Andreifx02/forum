@@ -19,7 +19,7 @@ func New(storage *postrgres.Storage) *Server {
 	}
 }
 
-func (s *Server) StartListen(cfg *config.Config) {
+func (s *Server) StartListen(cfg *config.Config) error {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/user/create", s.CreateUser).Methods("POST")
@@ -28,14 +28,12 @@ func (s *Server) StartListen(cfg *config.Config) {
 	router.HandleFunc("/like/create", s.CreateLike).Methods("POST")
 	router.HandleFunc("/user/{id}/subfeed", s.GetSubFeed).Methods("GET")
 	router.HandleFunc("/user/{id}/interesting", s.GetInteresting).Methods("GET")
-
-	
+	router.HandleFunc("/user/{id}/filter/subfeed", s.GetFilterSubFeed).Methods("GET")
+	router.HandleFunc("/user/{username}", s.GetUserByName).Methods("GET")
 
 	http.Handle("/", router)
 
 	url := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	err := http.ListenAndServe(url, nil)
-	if err != nil {
-		fmt.Printf("%s", err.Error())
-	}
+	return err
 }

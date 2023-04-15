@@ -2,6 +2,7 @@ package postrgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -37,11 +38,31 @@ func NewStorage(cfg *config.Config) (*Storage, error) {
 }
 
 func (s *Storage) CreateUser(ctx context.Context, user *domain.User) error {
-	_, err := s.pool.Exec(ctx, `
+	_, err := s.GetUserByName(ctx, user.Nickname)
+	if err == nil {
+		return UserAlreadyExists
+	}
+
+	_, err = s.pool.Exec(ctx, `
 		INSERT INTO users (id, nickname) VALUES ($1, $2)
 	`, user.ID, user.Nickname)
 
 	return err
+}
+
+func (s *Storage) GetUserByName(ctx context.Context, username string) (*domain.User, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT * FROM users WHERE nickname = $1
+	`, username)
+	var user domain.User
+	err := row.Scan(&user.ID, &user.Nickname)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, UserNotFound
+		}
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (s *Storage) CreatePost(ctx context.Context, post *domain.Post) error {
@@ -52,7 +73,7 @@ func (s *Storage) CreatePost(ctx context.Context, post *domain.Post) error {
 	return err
 }
 
-func(s *Storage) CreateSubscription(ctx context.Context, subscription *domain.Subscriptions) error{
+func (s *Storage) CreateSubscription(ctx context.Context, subscription *domain.Subscriptions) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO subscriptions (user_id, sub_user_id) VALUES ($1, $2) 
 	`, subscription.ID, subscription.SubID)
@@ -69,7 +90,7 @@ func (s *Storage) CreateLike(ctx context.Context, like *domain.Like) error {
 }
 
 func (s *Storage) GetSubFeed(ctx context.Context, userID uuid.UUID) ([]domain.Post, error) {
-	rows, err := s.pool.Query(ctx,`
+	rows, err := s.pool.Query(ctx, `
 		SELECT * FROM posts 
 		WHERE author_id IN (
 			SELECT sub_user_id FROM subscriptions 
@@ -81,7 +102,7 @@ func (s *Storage) GetSubFeed(ctx context.Context, userID uuid.UUID) ([]domain.Po
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return fetchPosts(rows)
 }
 
@@ -91,12 +112,12 @@ func (s *Storage) GetPossibleFriends(ctx context.Context, userID uuid.UUID) ([]u
 		WHERE 
 			user_id IN (SELECT sub_user_id FROM subscriptions WHERE user_id = $1)
 	`, userID)
-	
+
 	if err != nil {
 		return nil, err
 	}
 
-	users_ID := make([]uuid.UUID, 0) 
+	users_ID := make([]uuid.UUID, 0)
 	for rows.Next() {
 		var user_id uuid.UUID
 		err = rows.Scan(&user_id)
@@ -122,13 +143,13 @@ func (s *Storage) GetInteresting(ctx context.Context, userID uuid.UUID) ([]domai
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return fetchPosts(rows)
 }
 
 func fetchPosts(rows pgx.Rows) ([]domain.Post, error) {
 	posts := make([]domain.Post, 0)
-	
+
 	for rows.Next() {
 		var post domain.Post
 		err := rows.Scan(&post.ID, &post.AuthorID, &post.Topic, &post.Text, &post.Date)
@@ -137,6 +158,44 @@ func fetchPosts(rows pgx.Rows) ([]domain.Post, error) {
 		}
 		posts = append(posts, post)
 	}
-	
+
 	return posts, nil
+}
+
+func (s *Storage) GetFilterSubFeed(ctx context.Context, userID uuid.UUID, filter *domain.Filters) ([]domain.Post, error) {
+	var filters []any
+
+	// filters = append(filters, filter.Topic)
+	// filters = append(filters, filter.KeyWords)
+
+	query := "SELECT * FROM posts WHERE"
+
+	if filter.DateFrom != nil {
+		filters = append(filters, *filter.DateFrom)
+		query += " date > $" + fmt.Sprint(len(filters))
+	}
+	if filter.DateTo != nil {
+		if len(filters) != 0 {
+			query += " AND"
+		}
+		filters = append(filters, *filter.DateTo)
+		query += " date < $" + fmt.Sprint(len(filters))
+	}
+	if filter.AuthorID != nil {
+		if len(filters) != 0 {
+			query += " AND"
+		}
+		filters = append(filters, *filter.AuthorID)
+		query += " author_id = $" + fmt.Sprint(len(filters))
+	}
+
+	query += " ORDER BY date DESC"
+	fmt.Print(query)
+	rows, err := s.pool.Query(ctx, query, filters...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return fetchPosts(rows)
 }

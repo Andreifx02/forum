@@ -15,10 +15,14 @@ func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req request
-	json.NewDecoder(r.Body).Decode(&req)
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	ctx := context.Background()
-	err := s.storage.CreateUser(ctx, &domain.User{
+	err = s.storage.CreateUser(ctx, &domain.User{
 		ID:       uuid.New(),
 		Nickname: req.Nickname,
 	})

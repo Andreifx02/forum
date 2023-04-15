@@ -8,3 +8,7 @@ postrgesql:
 server:
   host: localhost
   port: 8080
+
+bot:
+  token: 6276365793:AAHg14HM5nE8MI8bEYZlgyffHrt9RVcSKCE
+  server: http://localhost:8080

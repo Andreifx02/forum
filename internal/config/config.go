@@ -20,6 +20,11 @@ type Config struct {
 		Host string `mapstructure:"host"`
 		Port int `mapstructure:"port"`
 	} `mapstructure:"server"`
+
+	Bot struct {
+		Token string `mapstructure:"token"`
+		Server string `mapstructure:"server"`
+	} `mapstructure:"bot"`
 }
 
 func GetConfig() *Config {

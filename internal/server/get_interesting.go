@@ -17,6 +17,7 @@ func (s *Server) GetInteresting(w http.ResponseWriter, r *http.Request) {
 	
 	if err != nil {
 		http.Error(w, fmt.Errorf("Invalid ID: %w", err).Error(), http.StatusUnprocessableEntity)
+		return
 	}
 
 	ctx := context.Background()
@@ -24,6 +25,7 @@ func (s *Server) GetInteresting(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	postJson, _ := json.Marshal(posts)
