@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -19,8 +20,7 @@ func (b *Bot) CreatePost(nickname string, topic string, text string, date time.T
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf(resp.Status)
 	}
-	
-	
+
 	var user domain.User
 	json.NewDecoder(resp.Body).Decode(&user)
 
@@ -32,17 +32,18 @@ func (b *Bot) CreatePost(nickname string, topic string, text string, date time.T
 
 	bts, _ := json.Marshal(request{
 		AuthorID: user.ID,
-		Topic: topic,
-		Text: text,
+		Topic:    topic,
+		Text:     text,
 	})
-	
-	resp, err = http.Post(fmt.Sprintf("%s/post/create",b.serverAddress),"application/json", bytes.NewBuffer(bts))
+
+	resp, err = http.Post(fmt.Sprintf("%s/post/create", b.serverAddress), "application/json", bytes.NewBuffer(bts))
 	if err != nil {
 		return err
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf(resp.Status)
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf(string(b))
 	}
 	return nil
 }

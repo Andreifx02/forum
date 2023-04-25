@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -19,7 +20,8 @@ func (b *Bot) SignUp(nickname string) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf(resp.Status)
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf(string(b))
 	}  
 	return nil
 }

@@ -1,8 +1,7 @@
 package bot
 
 import (
-	"strings"
-	"time"
+	"sync"
 
 	"github.com/Andreifx02/forum/internal/config"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -11,17 +10,49 @@ import (
 type Bot struct {
 	bot *tgbotapi.BotAPI
 	serverAddress string 
+	handlers map[string]Handler
+	updatesChan chan tgbotapi.Update
+	dialogs map[string]Dialog
 }
+
+type Dialog struct {
+	C chan tgbotapi.Message
+	Counter int
+}
+
 
 func New(cfg *config.Config) (*Bot, error) {
 	bot, err := tgbotapi.NewBotAPI(cfg.Bot.Token)
 	if err != nil {
 		return nil, err
 	}
-	return &Bot{
+
+	b := Bot{
 		bot: bot,
 		serverAddress: cfg.Bot.Server,
-	}, nil
+		updatesChan: make(chan tgbotapi.Update),
+		dialogs: make(map[string]Dialog),
+	}
+
+	b.addHandlers()
+
+	return &b, nil
+}
+
+func (b *Bot) addHandlers() {
+	b.handlers = make(map[string]Handler)
+	b.handlers["help"] = Handler{
+		Handler: b.helpHandler,
+		DialogSize: 0,
+	}
+	b.handlers["post"] = Handler{
+		Handler: b.createPostHandler,
+		DialogSize: 2,
+	}
+	b.handlers["signup"] = Handler{
+		Handler: b.signupHandler,
+		DialogSize: 0,
+	}
 }
 
 func (b *Bot) Run() {
@@ -29,35 +60,44 @@ func (b *Bot) Run() {
 	u.Timeout = 60
 
 	updates := b.bot.GetUpdatesChan(u)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func(){
+		for update := range updates {
+			b.updatesChan <- update
+		}
+		close(b.updatesChan)
+		wg.Done()
+	}()
+	
 
-	for update := range updates {
+	for update := range b.updatesChan {
 		if update.Message != nil { // If we got a message
-			if cmdName := update.Message.Command(); cmdName != "" {
-				if cmdName == "signup" {
-					text := "User is created"
-					err := b.SignUp(update.Message.From.UserName)
-					if err != nil {
-						text = err.Error()
-					} 
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, text)
-					b.bot.Send(msg)
+			dialog, ok := b.dialogs[update.Message.From.UserName]
+			if ok {
+				if dialog.Counter != 0 {
+					dialog.C <- *update.Message
+					dialog.Counter--
+					b.dialogs[update.Message.From.UserName] = dialog
 					continue
-				} 
-				if cmdName == "create_post" {
-					args := strings.Split(update.Message.CommandArguments(), "/")
-					if len(args) != 2 {
-						b.bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Invalid format"))
-						continue
-					}
-					err := b.CreatePost(update.Message.From.UserName, args[0], args[1], time.Unix(int64(update.Message.Date), 0))
-					if err != nil {
-						b.bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, err.Error()))
-						continue
-					}
-					b.bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Succesful:)"))
-					continue
+				} else {
+					close(dialog.C)
+					delete(b.dialogs, update.Message.From.UserName)
 				}
-				b.bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Unckown command"))
+			}
+			if cmdName := update.Message.Command(); cmdName != "" {
+				handler, ok := b.handlers[cmdName]
+				if !ok {
+					b.bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Unknown command"))
+				} else {
+					wg.Add(1)
+					b.dialogs[update.Message.From.UserName] = Dialog {
+						C: make(chan tgbotapi.Message, handler.DialogSize),
+						Counter: handler.DialogSize,
+					}
+					go handler.Handler(*update.Message, b.dialogs[update.Message.From.UserName].C)
+					wg.Done()
+				}
 				continue
 			}
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
@@ -66,5 +106,7 @@ func (b *Bot) Run() {
 			b.bot.Send(msg)
 		}
 	}
+
+	wg.Wait()
 }
 
